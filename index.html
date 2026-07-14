@@ -133,6 +133,49 @@ body { font-family: 'Inter', sans-serif; background: #0f172a; color: #e2e8f0; }
 </div>
 </div>
 
+
+        <!-- Day Trading & Swing Trading -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+            <div class="glass rounded-2xl p-4">
+                <h3 class="text-sm font-bold text-white mb-3"><i class="fas fa-bolt mr-2 text-yellow-400"></i>Top 10 Day Trading</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs">
+                        <thead class="bg-slate-800/50">
+                            <tr>
+                                <th class="px-2 py-2 text-left text-slate-400">Saham</th>
+                                <th class="px-2 py-2 text-center text-slate-400">RR</th>
+                                <th class="px-2 py-2 text-right text-slate-400">Entry</th>
+                                <th class="px-2 py-2 text-right text-slate-400">Target</th>
+                                <th class="px-2 py-2 text-right text-slate-400">Stop Loss</th>
+                                <th class="px-2 py-2 text-center text-slate-400">Score</th>
+                                <th class="px-2 py-2 text-center text-slate-400">TV</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dayTradingTable"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="glass rounded-2xl p-4">
+                <h3 class="text-sm font-bold text-white mb-3"><i class="fas fa-chart-line mr-2 text-purple-400"></i>Top 10 Swing Trading</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs">
+                        <thead class="bg-slate-800/50">
+                            <tr>
+                                <th class="px-2 py-2 text-left text-slate-400">Saham</th>
+                                <th class="px-2 py-2 text-center text-slate-400">RR</th>
+                                <th class="px-2 py-2 text-right text-slate-400">Entry</th>
+                                <th class="px-2 py-2 text-right text-slate-400">Target</th>
+                                <th class="px-2 py-2 text-right text-slate-400">Stop Loss</th>
+                                <th class="px-2 py-2 text-center text-slate-400">Score</th>
+                                <th class="px-2 py-2 text-center text-slate-400">TV</th>
+                            </tr>
+                        </thead>
+                        <tbody id="swingTradingTable"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
 <div class="glass rounded-2xl overflow-hidden">
 <div class="p-4 border-b border-slate-700/50 flex justify-between items-center">
 <h3 class="text-sm font-bold text-white"><i class="fas fa-table mr-2 text-purple-400"></i>Daftar Saham</h3>
@@ -201,59 +244,14 @@ async function fetchLiveData() {
 }
 
 function parseCSV(text) {
-    // Parse CSV with proper handling of quoted fields
-    const lines = [];
-    let currentLine = [];
-    let currentField = '';
-    let inQuotes = false;
-
-    for (let i = 0; i < text.length; i++) {
-        const char = text[i];
-        const nextChar = text[i + 1];
-
-        if (inQuotes) {
-            if (char === '"' && nextChar === '"') {
-                currentField += '"';
-                i++;
-            } else if (char === '"') {
-                inQuotes = false;
-            } else {
-                currentField += char;
-            }
-        } else {
-            if (char === '"') {
-                inQuotes = true;
-            } else if (char === ',') {
-                currentLine.push(currentField.trim());
-                currentField = '';
-            } else if (char === '\n' || (char === '\r' && nextChar === '\n')) {
-                if (char === '\r') i++;
-                currentLine.push(currentField.trim());
-                if (currentLine.length > 1 || currentLine[0] !== '') {
-                    lines.push(currentLine);
-                }
-                currentLine = [];
-                currentField = '';
-            } else {
-                currentField += char;
-            }
-        }
-    }
-    // Handle last field
-    if (currentField !== '' || currentLine.length > 0) {
-        currentLine.push(currentField.trim());
-        lines.push(currentLine);
-    }
-
+    const lines = text.trim().split('\n');
     if (lines.length < 2) return [];
-
-    const headers = lines[0];
+    const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
     const result = [];
-
     for (let i = 1; i < lines.length; i++) {
-        const values = lines[i];
+        const values = lines[i].split(',');
         const obj = {};
-        headers.forEach((h, idx) => { obj[h] = values[idx] || ''; });
+        headers.forEach((h, idx) => { obj[h] = values[idx] ? values[idx].trim().replace(/^"|"$/g, '') : ''; });
         result.push({
             code: obj['Saham'] || '', name: obj['Nama Perusahaan'] || '',
             price: parseFloat((obj['Harga'] || '').replace(/\./g, '').replace(',', '.')) || null,
@@ -374,6 +372,73 @@ function renderTopMovers() {
     document.getElementById('topMovers').innerHTML = html;
 }
 
+
+function renderTradingTables() {
+    // Filter stocks with valid swing data
+    const swingStocks = allData.filter(s => 
+        s.swingEntry && s.swingEntry !== '' && 
+        s.swingTarget && s.swingTarget !== '' && 
+        s.swingStopLoss && s.swingStopLoss !== '' &&
+        s.riskReward && s.riskReward !== ''
+    ).sort((a, b) => {
+        // Sort by Score Total descending, then by RR descending
+        const scoreA = a.scoreTotal || 0;
+        const scoreB = b.scoreTotal || 0;
+        if (scoreB !== scoreA) return scoreB - scoreA;
+
+        const rrA = parseFloat((a.riskReward || '0').replace(',', '.'));
+        const rrB = parseFloat((b.riskReward || '0').replace(',', '.'));
+        return rrB - rrA;
+    });
+
+    // Day Trading: stocks with high RR and good score, scalping recommendation
+    const dayTradingStocks = swingStocks.filter(s => {
+        const rr = parseFloat((s.riskReward || '0').replace(',', '.'));
+        const score = s.scoreTotal || 0;
+        return rr >= 1.5 && score >= 1.5;
+    }).slice(0, 10);
+
+    // Swing Trading: stocks with clear swing signal
+    const swingTradingStocks = swingStocks.filter(s => {
+        return s.swingSignal && s.swingSignal !== 'NO SWING' && s.swingSignal !== '';
+    }).slice(0, 10);
+
+    // Render Day Trading table
+    const dayTable = document.getElementById('dayTradingTable');
+    if (dayTable) {
+        dayTable.innerHTML = dayTradingStocks.map(s => renderTradingRow(s)).join('');
+    }
+
+    // Render Swing Trading table
+    const swingTable = document.getElementById('swingTradingTable');
+    if (swingTable) {
+        swingTable.innerHTML = swingTradingStocks.map(s => renderTradingRow(s)).join('');
+    }
+}
+
+function renderTradingRow(stock) {
+    const rr = parseFloat((stock.riskReward || '0').replace(',', '.'));
+    const rrColor = rr >= 2 ? 'text-emerald-400' : rr >= 1.5 ? 'text-blue-400' : 'text-yellow-400';
+    const score = stock.scoreTotal || 0;
+    const scoreColor = score >= 3 ? 'text-emerald-400' : score >= 2 ? 'text-blue-400' : 'text-yellow-400';
+
+    return `<tr class="stock-row border-b border-slate-800/50">
+        <td class="px-2 py-2">
+            <a href="https://www.tradingview.com/chart/?symbol=IDX:${stock.code}.JK" target="_blank" class="tv-link">${stock.code}</a>
+        </td>
+        <td class="px-2 py-2 text-center font-mono ${rrColor} font-bold">${stock.riskReward || '-'}</td>
+        <td class="px-2 py-2 text-right font-mono text-white">${stock.swingEntry || '-'}</td>
+        <td class="px-2 py-2 text-right font-mono text-emerald-400">${stock.swingTarget || '-'}</td>
+        <td class="px-2 py-2 text-right font-mono text-red-400">${stock.swingStopLoss || '-'}</td>
+        <td class="px-2 py-2 text-center font-mono ${scoreColor} font-bold">${score}</td>
+        <td class="px-2 py-2 text-center">
+            <a href="https://www.tradingview.com/chart/?symbol=IDX:${stock.code}.JK" target="_blank" class="tv-btn">
+                <i class="fas fa-external-link-alt"></i>
+            </a>
+        </td>
+    </tr>`;
+}
+
 function initCharts() {
     const signalCounts = {};
     allData.forEach(s => { if (s.signal && !s.signal.startsWith('#')) signalCounts[s.signal] = (signalCounts[s.signal] || 0) + 1; });
@@ -404,7 +469,7 @@ function refreshData() { location.reload(); }
 
 document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('lastUpdate').textContent = new Date().toLocaleString('id-ID');
-    renderTable(); updateCounts(); renderTopMovers(); initCharts();
+    renderTable(); updateCounts(); renderTopMovers(); renderTradingTables(); initCharts();
     setInterval(() => { if (isLive) fetchLiveData(); }, 5 * 60 * 1000);
 });
 </script>
