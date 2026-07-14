@@ -36,7 +36,6 @@ body { font-family: 'Inter', sans-serif; background: #0f172a; color: #e2e8f0; }
 .loading { animation: pulse 2s infinite; }
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
 </style>
-<base target="_blank">
 </head>
 <body class="min-h-screen">
 <div class="container mx-auto px-4 py-5 max-w-7xl">
@@ -264,13 +263,34 @@ async function fetchLiveData() {
     }
 }
 
+// Parser CSV yang aman terhadap koma di dalam tanda kutip (mis. angka format Indonesia "1.234,56")
+function parseCSVLine(line) {
+    const values = [];
+    let cur = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+            if (inQuotes && line[i + 1] === '"') { cur += '"'; i++; }
+            else { inQuotes = !inQuotes; }
+        } else if (ch === ',' && !inQuotes) {
+            values.push(cur); cur = '';
+        } else {
+            cur += ch;
+        }
+    }
+    values.push(cur);
+    return values;
+}
+
 function parseCSV(text) {
     const lines = text.trim().split('\n');
     if (lines.length < 2) return [];
-    const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+    const headers = parseCSVLine(lines[0]).map(h => h.trim().replace(/^"|"$/g, ''));
     const result = [];
     for (let i = 1; i < lines.length; i++) {
-        const values = lines[i].split(',');
+        if (!lines[i].trim()) continue;
+        const values = parseCSVLine(lines[i]);
         const obj = {};
         headers.forEach((h, idx) => { obj[h] = values[idx] ? values[idx].trim().replace(/^"|"$/g, '') : ''; });
         result.push({
@@ -485,5 +505,5 @@ document.addEventListener('DOMContentLoaded', () => {
     setInterval(() => { if (isLive) fetchLiveData(); }, 5 * 60 * 1000);
 });
 </script>
-</script></body>
+</body>
 </html>
